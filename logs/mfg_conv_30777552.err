@@ -1,0 +1,208 @@
+Precompiling ProgressBars...
+   1847.4 ms  ✓ Unicode
+    802.5 ms  ✓ Printf
+    864.4 ms  ✓ ProgressBars
+  3 dependencies successfully precompiled in 4 seconds
+Precompiling Plots...
+   1440.9 ms  ✓ Logging
+   1888.6 ms  ✓ OpenLibm_jll
+   1884.3 ms  ✓ UUIDs
+   2318.5 ms  ✓ LaTeXStrings
+   2257.4 ms  ✓ StatsAPI
+   2299.5 ms  ✓ TensorCore
+   2240.0 ms  ✓ Contour
+   1841.8 ms  ✓ MozillaCACerts_jll
+   2084.4 ms  ✓ Statistics
+   2246.7 ms  ✓ Measures
+   2820.3 ms  ✓ ArgTools
+   2578.7 ms  ✓ NetworkOptions
+   2490.3 ms  ✓ Serialization
+   2205.0 ms  ✓ CompilerSupportLibraries_jll
+   2139.0 ms  ✓ SuiteSparse_jll
+   3066.2 ms  ✓ Format
+   1454.8 ms  ✓ nghttp2_jll
+   2080.5 ms  ✓ URIs
+   1662.6 ms  ✓ p7zip_jll
+   1709.8 ms  ✓ StableRNGs
+   1713.9 ms  ✓ Reexport
+   1755.5 ms  ✓ Unzip
+   2060.7 ms  ✓ OrderedCollections
+   2029.2 ms  ✓ MbedTLS_jll
+   2004.0 ms  ✓ Zlib_jll
+   1966.0 ms  ✓ DocStringExtensions
+   2370.4 ms  ✓ Grisu
+   1849.1 ms  ✓ SimpleBufferStream
+   1856.9 ms  ✓ Mmap
+   2278.7 ms  ✓ IrrationalConstants
+   3840.3 ms  ✓ MacroTools
+   1546.2 ms  ✓ PtrArrays
+   2103.7 ms  ✓ PCRE2_jll
+   1980.5 ms  ✓ DataAPI
+   2089.4 ms  ✓ BitFlags
+   2175.1 ms  ✓ Base64
+   2081.3 ms  ✓ NaNMath
+   2312.9 ms  ✓ TranscodingStreams
+   2144.6 ms  ✓ Requires
+   2084.4 ms  ✓ Tar
+   1900.1 ms  ✓ LibSSH2_jll
+   1815.1 ms  ✓ DelimitedFiles
+   2185.3 ms  ✓ ConcurrentUtilities
+   1802.3 ms  ✓ LogExpFunctions
+   1640.7 ms  ✓ AliasTables
+   2153.3 ms  ✓ Missings
+   4694.2 ms  ✓ FixedPointNumbers
+   4872.1 ms  ✓ Dates
+   2224.6 ms  ✓ LibCURL_jll
+   2357.3 ms  ✓ CodecZlib
+   2312.6 ms  ✓ LibGit2_jll
+   7502.9 ms  ✓ SparseArrays
+   3612.6 ms  ✓ TOML
+   3698.7 ms  ✓ Scratch
+   3639.3 ms  ✓ Showoff
+   7505.6 ms  ✓ Markdown
+  13333.5 ms  ✓ StyledStrings
+   4384.6 ms  ✓ LoggingExtras
+   4322.8 ms  ✓ LibCURL
+   4836.7 ms  ✓ ColorTypes
+   4966.5 ms  ✓ MbedTLS
+   3016.8 ms  ✓ Statistics → SparseArraysExt
+    839.9 ms  ✓ RelocatableFolders
+   6174.8 ms  ✓ LibGit2
+   1964.0 ms  ✓ Compat
+   2024.1 ms  ✓ Preferences
+   2546.1 ms  ✓ InteractiveUtils
+   2663.9 ms  ✓ ColorTypes → StyledStringsExt
+   1322.6 ms  ✓ Compat → CompatLinearAlgebraExt
+   1995.0 ms  ✓ PrecompileTools
+   2092.6 ms  ✓ JLLWrappers
+   4689.8 ms  ✓ ColorVectorSpace
+   6953.1 ms  ✓ Downloads
+   3897.5 ms  ✓ RecipesBase
+   7640.5 ms  ✓ DataStructures
+   8629.0 ms  ✓ Latexify
+   7800.7 ms  ✓ Test
+  10348.4 ms  ✓ Colors
+   4332.0 ms  ✓ OpenSSL_jll
+   4314.2 ms  ✓ Graphite2_jll
+   4416.4 ms  ✓ Libmount_jll
+   4372.0 ms  ✓ EpollShim_jll
+   4356.7 ms  ✓ LLVMOpenMP_jll
+   4340.7 ms  ✓ Bzip2_jll
+   4235.5 ms  ✓ Xorg_libICE_jll
+   4097.0 ms  ✓ Xorg_libXau_jll
+   1852.9 ms  ✓ libpng_jll
+   3229.0 ms  ✓ Ogg_jll
+   4040.7 ms  ✓ fzf_jll
+   4122.0 ms  ✓ LERC_jll
+   3804.4 ms  ✓ mtdev_jll
+   4181.6 ms  ✓ XZ_jll
+   4714.7 ms  ✓ libfdk_aac_jll
+   4608.6 ms  ✓ JpegTurbo_jll
+   4347.9 ms  ✓ x264_jll
+   4408.7 ms  ✓ x265_jll
+   4899.9 ms  ✓ LAME_jll
+   4484.2 ms  ✓ Xorg_libXdmcp_jll
+   4320.0 ms  ✓ Zstd_jll
+   7018.4 ms  ✓ libaom_jll
+  17508.2 ms  ✓ Parsers
+  27535.6 ms  ✓ Unitful
+   6117.3 ms  ✓ Expat_jll
+   6041.8 ms  ✓ LZO_jll
+   5993.2 ms  ✓ Opus_jll
+   5927.6 ms  ✓ Xorg_xtrans_jll
+   5802.8 ms  ✓ libevdev_jll
+   5526.5 ms  ✓ Libiconv_jll
+   5259.9 ms  ✓ Libffi_jll
+   5008.3 ms  ✓ eudev_jll
+   4778.5 ms  ✓ Libuuid_jll
+   4388.2 ms  ✓ FriBidi_jll
+   2365.6 ms  ✓ ExceptionUnwrapping
+   3894.3 ms  ✓ SortingAlgorithms
+   3751.4 ms  ✓ Latexify → SparseArraysExt
+   3852.0 ms  ✓ libvorbis_jll
+   4104.7 ms  ✓ Pixman_jll
+   4072.3 ms  ✓ FreeType2_jll
+   4142.1 ms  ✓ Xorg_libSM_jll
+   3547.3 ms  ✓ Dbus_jll
+   4334.1 ms  ✓ Xorg_libxcb_jll
+   4061.9 ms  ✓ Unitful → PrintfExt
+   5346.0 ms  ✓ OpenSSL
+   4018.6 ms  ✓ Wayland_jll
+   4769.6 ms  ✓ Libtiff_jll
+   4173.0 ms  ✓ GettextRuntime_jll
+   5362.9 ms  ✓ JSON
+   3535.0 ms  ✓ libinput_jll
+   2350.4 ms  ✓ Fontconfig_jll
+   8957.5 ms  ✓ ColorSchemes
+   2969.0 ms  ✓ Xorg_xcb_util_jll
+   3515.8 ms  ✓ Xorg_libX11_jll
+   4784.3 ms  ✓ UnitfulLatexify
+   4640.5 ms  ✓ Glib_jll
+   7800.5 ms  ✓ StatsBase
+   3993.7 ms  ✓ Xorg_xcb_util_renderutil_jll
+   4162.7 ms  ✓ Xorg_xcb_util_image_jll
+   3953.8 ms  ✓ Xorg_xcb_util_wm_jll
+   4121.0 ms  ✓ Xorg_xcb_util_keysyms_jll
+   3826.4 ms  ✓ Xorg_libXrender_jll
+   3702.4 ms  ✓ Xorg_libXext_jll
+   3449.5 ms  ✓ Xorg_libXfixes_jll
+   3326.5 ms  ✓ Xorg_libxkbfile_jll
+   1731.1 ms  ✓ Xorg_xcb_util_cursor_jll
+   1844.3 ms  ✓ Xorg_libXinerama_jll
+   1973.2 ms  ✓ Xorg_libXrandr_jll
+   2080.0 ms  ✓ Libglvnd_jll
+   2007.9 ms  ✓ Xorg_libXi_jll
+   1914.5 ms  ✓ Xorg_xkbcomp_jll
+   2062.1 ms  ✓ Xorg_libXcursor_jll
+   3428.5 ms  ✓ Cairo_jll
+   1418.5 ms  ✓ Xorg_xkeyboard_config_jll
+   1683.9 ms  ✓ xkbcommon_jll
+   2962.4 ms  ✓ HarfBuzz_jll
+  14019.0 ms  ✓ PlotUtils
+   4048.7 ms  ✓ Vulkan_Loader_jll
+   3905.2 ms  ✓ libass_jll
+   3993.3 ms  ✓ Pango_jll
+  10040.3 ms  ✓ PlotThemes
+  28932.4 ms  ✓ HTTP
+  12350.4 ms  ✓ RecipesPipeline
+  10610.7 ms  ✓ libdecor_jll
+  11920.4 ms  ✓ Qt6Base_jll
+  11467.8 ms  ✓ FFMPEG_jll
+  62334.1 ms  ✓ REPL
+   7451.6 ms  ✓ FFMPEG
+   8662.9 ms  ✓ GLFW_jll
+   3770.7 ms  ✓ JLFzf
+   8946.9 ms  ✓ Qt6ShaderTools_jll
+   4523.3 ms  ✓ UnicodeFun
+   4375.2 ms  ✓ GR_jll
+   4210.4 ms  ✓ Qt6Declarative_jll
+  70605.2 ms  ✓ Pkg
+  16674.5 ms  ✓ Qt6Wayland_jll
+  11103.3 ms  ✓ GR
+  15284.3 ms  ✓ Pkg → REPLExt
+  73425.8 ms  ✓ Plots
+  18496.7 ms  ✓ Plots → UnitfulExt
+  178 dependencies successfully precompiled in 225 seconds. 2 already precompiled.
+Precompiling FFTW...
+    912.0 ms  ✓ AbstractFFTs
+   1134.4 ms  ✓ oneTBB_jll
+   1088.2 ms  ✓ FFTW_jll
+   1699.1 ms  ✓ LazyArtifacts
+   1944.4 ms  ✓ IntelOpenMP_jll
+   2468.6 ms  ✓ MKL_jll
+  10731.2 ms  ✓ FFTW
+  7 dependencies successfully precompiled in 18 seconds. 26 already precompiled.
+Precompiling SpecialFunctions...
+   1049.5 ms  ✓ OpenSpecFun_jll
+   3476.3 ms  ✓ SpecialFunctions
+  2 dependencies successfully precompiled in 5 seconds. 11 already precompiled.
+Precompiling SpecialFunctionsExt...
+   1178.3 ms  ✓ ColorVectorSpace → SpecialFunctionsExt
+  1 dependency successfully precompiled in 2 seconds. 20 already precompiled.
+Precompiling QuadGK...
+   1476.4 ms  ✓ QuadGK
+  1 dependency successfully precompiled in 2 seconds. 12 already precompiled.
+srun: got SIGCONT
+slurmstepd: error: *** JOB 30777552 ON holy7c02505 CANCELLED AT 2025-08-18T21:00:00 ***
+srun: forcing job termination
+slurmstepd: error: *** STEP 30777552.0 ON holy7c02505 CANCELLED AT 2025-08-18T21:00:00 ***

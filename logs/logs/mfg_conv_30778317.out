@@ -1,0 +1,41 @@
+START
+hlist: [0.03125, 0.015625, 0.0078125, 0.00390625, 0.001953125, 0.000244140625]
+h_reference: 0.000244140625
+M_list: Array{Float64}[]
+U_listArray{Float64}[]
+
+start for loop, h=0.03125
+C_H: 0.5
+Running MFG_solve with h=0.03125
+Done running MFG_sovle with h=0.03125
+size(M_mat): (96, 200)
+size(U_mat): (96, 200)
+!!!!!!!!!!!!!!
+
+start for loop, h=0.015625
+C_H: 0.5
+Running MFG_solve with h=0.015625
+Done running MFG_sovle with h=0.015625
+size(M_mat): (192, 200)
+size(U_mat): (192, 200)
+!!!!!!!!!!!!!!
+
+start for loop, h=0.0078125
+C_H: 0.5
+Running MFG_solve with h=0.0078125
+Done running MFG_sovle with h=0.0078125
+size(M_mat): (384, 200)
+size(U_mat): (384, 200)
+!!!!!!!!!!!!!!
+
+start for loop, h=0.00390625
+C_H: 0.5
+Running MFG_solve with h=0.00390625
+Done running MFG_sovle with h=0.00390625
+size(M_mat): (768, 200)
+size(U_mat): (768, 200)
+!!!!!!!!!!!!!!
+
+start for loop, h=0.001953125
+C_H: 0.5
+Running MFG_solve with h=0.001953125
