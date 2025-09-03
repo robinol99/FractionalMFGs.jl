@@ -2,7 +2,7 @@ using ProgressBars;
 using ProgressMeter
 using LinearAlgebra, Plots, FFTW;
 using LoggingExtras, ProgressLogging, Logging, TerminalLoggers
-
+using Infiltrator
 import LinearSolve as LS
 using SparseArrays
 using QuadGK;
@@ -27,28 +27,63 @@ function Gh_func(M)
     return zeros(length(M))
 end
 
-function conv_fft(M, x_grid, h, δ) # Double check
-    N = length(M)
+#= function conv_fft(M, x_grid, h, δ) # Double check
+    N_h = length(M)
     L = x_grid[end] - x_grid[1]   # domain length
-
+    # Force L=1 since "physical" domain is (0,1), extension to (-1,2) is to avoid boundary artifacts? Tried but gives large
     # grid differences, wrapped into (-L/2, L/2]
-    raw_diffs = collect(0:N-1) .* h
+    raw_diffs = collect(0:N_h-1) .* h
     diffs = raw_diffs .- round.(raw_diffs ./ L) .* L
 
     # Gaussian kernel on differences
-    ϕ = exp.(-(diffs .^ 2) ./ (2δ^2))
-    ϕ ./= (h * sum(ϕ))   # normalization
+    ϕ_prenormalization = exp.(-(diffs .^ 2) ./ (2δ^2))
+    ϕ = ϕ_prenormalization ./ (h * sum(ϕ_prenormalization))   # normalization
 
     # FFT-based circular convolution
     conv = real(ifft(fft(ϕ) .* fft(M)))
     return conv
+end =#
+
+function old_conv_func(m_vec, x_vec, δ)
+    ### Double check if this is actually correct, not completely sure...
+    ### The "physical domain" is [0,1), but we extend to (-1,2) to avoid boundary artifacts...
+    ### What is then the correct way to handle the convolution?
+    old_ϕ_δ = (x, δ) -> 1 / (δ * sqrt(2 * π)) * exp(-x^2 / (2 * δ^2))
+    N_h = length(m_vec)
+    h = x_vec[2] - x_vec[1]
+    conv_vec = Vector{Float64}(undef, N_h)
+
+    # Base offsets from reference node and minimum-image wrap
+    # Δs = x_vec .- x_vec[1]
+    # Δs .-= round.(Δs)  # map to (-0.5, 0.5]
+    Δs = (x_vec .- x_vec[1]) .- round.(x_vec .- x_vec[1])  # (-0.5, 0.5] 
+
+    # Periodic kernel weights and discrete normalization
+    weights = old_ϕ_δ.(Δs, δ)
+    Z = h * sum(weights)
+    weights ./= Z
+
+    # Circular convolution with circulant weights (O(N^2), robust and simple)
+    for j in 1:N_h
+        s = 0.0
+        for i in 1:N_h
+            idx = mod(j - i, N_h) + 1  # 1-based index
+            s += weights[idx] * m_vec[i]
+        end
+        conv_vec[j] = h * s
+    end
+    return conv_vec
 end
+
 
 
 function Fh_func(M_n, t_n, δ, x_grid, h)
     #ϕ_δ=1/(δ* sqrt(2*π)) * exp.(- (x_grid .^ 2) / (2*δ^2))
-    conv_term = conv_fft(M_n, x_grid, h, δ)
-    return 5 * ((M_n .- 0.5 * (sin(2 * π * t_n))) .^ 2) + conv_term #Double check
+    f_term_func = (x, t) -> 5 * (x - 0.5 * (1 - sin(2 * π * t)))^2
+    conv_term = old_conv_func(M_n, x_grid, δ)
+    #conv_term = conv_fft(M_n, x_grid, h, δ)
+    f_term = f_term_func.(x_grid, t_n)
+    return f_term + conv_term #Double check
 end
 
 function H_func(p)
@@ -56,9 +91,9 @@ function H_func(p)
 end
 
 function create_mathcalF(x, U_n, PDL_matrix, M_n, Δt, n, h, ν, x_grid)
-    F_hM_n = Fh_func(M_n, (n - 1) * Δt, δ, x_grid, h)
+    F_hM_n = Fh_func(M_n, (n - 1) * Δt, δ, x_grid, h) #time was T-nΔt in old code??
     δ_hx = central_diff_vec(x, h)
-    Hδ_hx = (1 / 2) * H_func.(δ_hx)
+    Hδ_hx = H_func.(δ_hx)
     return x - U_n + Δt * (ν * PDL_matrix * x + Hδ_hx - F_hM_n)
 end
 
@@ -101,17 +136,25 @@ end
 function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_grid)
     x_k = U_n
 
-
     #println("Starting Netwon's method...")
-    Newtons_progress = Progress(num_it_MFG, desc="Newtons iterations")
+    #if n > 69
+    # println("Inside")
+    # @infiltrate
+    #end
+
+    #Newtons_progress = Progress(num_it_MFG, desc="Newtons iterations")
     for k in 1:num_iter_HJB
-        #println("k=",k)
+        #println("k=",k) 
         J_F = create_Jacobian(N_h, x_k, PDL_matrix, Δt, h, ν)
         mathcalFx_k = create_mathcalF(x_k, U_n, PDL_matrix, M_n, Δt, n, h, ν, x_grid)
         δ_k = J_F \ mathcalFx_k
         x_kp1 = x_k - δ_k
         x_k = x_kp1
-        next!(Newtons_progress)
+        #next!(Newtons_progress)
+
+        #if n > 69
+        #@infiltrate
+        # end
     end
     U_np1 = x_k
     return U_np1
@@ -122,12 +165,13 @@ function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_
     U_mat[:, 1] = Gh_func(M_mat[:, 1])
 
     #println("Starting HJB_solve ...")
-    HJB_progress = Progress(num_it_MFG, desc="HJB iterations")
+    #HJB_progress = Progress(num_it_MFG, desc="HJB iterations")
     for n in 1:(N_T-1)
         #println("n=",n)
         U_mat[:, n+1] = new_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid)
-        next!(HJB_progress)
+        #next!(HJB_progress)
     end
+    #@infiltrate
     return U_mat
 end
 
@@ -136,14 +180,14 @@ end
 # FPK algorithm
 
 function new_FPK_step(N_h, M_np1, U_np1, PDL_matrix, h, ν, Δt)
-    T = zeros(N_h, N_h)
     U_diff_vec = central_diff_vec(U_np1, h)
-    T += Tridiagonal(-1 * U_diff_vec[1:(N_h-1)], zeros(N_h), circshift(U_diff_vec, -1)[2:N_h])
+    T = zeros(N_h, N_h) + Tridiagonal(-1 * U_diff_vec[1:(N_h-1)], zeros(N_h), U_diff_vec[2:N_h])
     T[1, end] = -U_diff_vec[end]
     T[end, 1] = U_diff_vec[1]
 
-    M_n = (I + Δt * (ν * PDL_matrix - (1 / (2h)) * T)) \ M_np1
-
+    tot_mat = (1.0 * I(N_h) + Δt * (ν * PDL_matrix - (1 / (2h)) * T))
+    M_n = tot_mat \ M_np1
+    #@infiltrate
     return M_n
 end
 
@@ -151,10 +195,10 @@ function new_FPK_solve(U_mat, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α)
     M_mat = Array{Float64}(undef, N_h, N_T)
     M_mat[:, end] = M_T
 
-    FPK_progress = Progress(num_it_MFG, desc="FPK iterations")
+    #FPK_progress = Progress(num_it_MFG, desc="FPK iterations")
     for j in 1:(N_T-1)
         M_mat[:, N_T-j] = new_FPK_step(N_h, M_mat[:, N_T-j+1], U_mat[:, N_T-j+1], PDL_matrix, h, ν, Δt)
-        next!(FPK_progress)
+        #next!(FPK_progress)
     end
     return M_mat
 end
@@ -163,16 +207,19 @@ end
 
 # MFG algorithm
 
+
+
 function MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid)
     M_mat = repeat(M_T, 1, N_T)
     U_mat = Array{Float64}(undef, N_h, N_T)
     PDL_matrix = create_PDL_matrix(N_h, α, h, R)
 
     println("Starting MFG_solve for loop...")
-    for j in 1:num_it_MFG
-        println("MFG iterations. j=", j, "/", num_it_MFG)
+    for j in ProgressBar(1:num_it_MFG)
+        #println("MFG iterations. j=", j, "/", num_it_MFG)
         U_mat = new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_it_HJB, x_grid)
         M_mat = new_FPK_solve(U_mat, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α)
+        #@infiltrate
     end
     return (U_mat, M_mat)
 end
@@ -190,7 +237,7 @@ using JSON
 println("RUN SIMULATION")
 ####Choose grid sizes and parameters:
 h_reference = 1 / 2^9
-h_list = [1 / 2^6, 1 / 2^7, 1 / 2^8, h_reference]
+h_list = [1 / 2^7, 1 / 2^8, h_reference]
 
 α = 1.5
 x_l = -1

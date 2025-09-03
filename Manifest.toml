@@ -2,7 +2,7 @@
 
 julia_version = "1.10.5"
 manifest_format = "2.0"
-project_hash = "55255709febb2770cf4d9c558a48cc1edc8c9457"
+project_hash = "b7b865285a7044291c87629d763c167c1d5c347e"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "60665b326b75db6517939d0e1875850bc4a54368"
@@ -479,6 +479,12 @@ deps = ["Base64", "Conda", "Dates", "InteractiveUtils", "JSON", "Logging", "Mark
 git-tree-sha1 = "840dd1002f71b0f408a60706f41b3a99b27618a0"
 uuid = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
 version = "1.30.2"
+
+[[deps.Infiltrator]]
+deps = ["InteractiveUtils", "Markdown", "REPL", "UUIDs"]
+git-tree-sha1 = "5c248f54dd39381e320f63363e1fbd12f8a5a822"
+uuid = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
+version = "1.9.3"
 
 [[deps.IntelOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl"]
