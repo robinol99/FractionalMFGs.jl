@@ -1,3 +1,5 @@
 *.jl.*.cov
 *.jl.cov
 *.jl.mem
+notebooks/new_MFG_convergence_rate_runs/
+notebooks/new_MFG_iteration_plots/
