@@ -164,6 +164,34 @@ function create_Jacobian!(J_F_gpu, N_h, δ_hU_gpu, PDL_matrix_gpu, Δt, h, ν)
 
     # Add PDL contribution
     J_F_gpu .+= Δt * ν * PDL_matrix_gpu
+
+    #=     # Precompute coefficients
+        coef = Δt / (2h)
+
+        # Interior indices
+        interior = 2:N_h-1
+
+        # Fill diagonals (broadcast over slices)
+        @views J_F_gpu[interior, interior] .= 1.0                           # main diagonal
+        @views J_F_gpu[interior, interior.-1] .= .-coef .* δ_hU_gpu[interior]  # sub-diagonal
+        @views J_F_gpu[interior, interior.+1] .= coef .* δ_hU_gpu[interior]   # super-diagonal
+
+        # Periodic boundaries — do explicitly once per edge (2 writes per edge is fine)
+        @views begin
+            J_F_gpu[1, 1] = 1.0
+            J_F_gpu[1, 2] = coef * δ_hU_gpu[1]
+            J_F_gpu[1, end] = -coef * δ_hU_gpu[1]
+
+            J_F_gpu[end, end] = 1.0
+            J_F_gpu[end, end-1] = -coef * δ_hU_gpu[end]
+            J_F_gpu[end, 1] = coef * δ_hU_gpu[end]
+        end
+
+        # Add PDL contribution (one broadcasted kernel)
+        J_F_gpu .+= Δt * ν * PDL_matrix_gpu =#
+
+
+    return J_F_gpu
 end
 
 
@@ -257,7 +285,7 @@ function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_
 
     for n in 1:(N_T-1)
         #println("n=",n)
-        time_percentages = @time new_HJB_step!(num_iter_HJB, N_h, view(U_mat_gpu, :, n + 1), view(U_mat_gpu, :, n), view(M_mat_gpu, :, n), PDL_matrix_gpu, Δt, h, ν, n, x_grid, δ, J_F_gpu, mathcalF_gpu, δ_k_gpu, cent_diff_vec, Hδ_hx)
+        time_percentages = new_HJB_step!(num_iter_HJB, N_h, view(U_mat_gpu, :, n + 1), view(U_mat_gpu, :, n), view(M_mat_gpu, :, n), PDL_matrix_gpu, Δt, h, ν, n, x_grid, δ, J_F_gpu, mathcalF_gpu, δ_k_gpu, cent_diff_vec, Hδ_hx)
         #println("n: ", n, "Time and time percentages [N (Newtons), J/N, F/N, inverse/N]: ", time_percentages)
         avg_times[1] += time_percentages[1]
         avg_times[2] += time_percentages[2]
@@ -273,6 +301,8 @@ function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_
     avg_times[4] = avg_times[4] / (N_T - 1)
     println("HJB solve time: ", time() - hjb_solve_time, ". HJB step avg time and time percentages [N (Newtons), J/N, F/N, inverse/N]: ", avg_times)
     #@infiltrate
+
+    U_mat = Array(U_mat_gpu)
     return U_mat
 end
 
@@ -280,47 +310,69 @@ end
 
 # FPK algorithm
 
-function new_FPK_step(N_h, M_np1, U_np1, PDL_matrix, h, ν, Δt)
-    U_diff_vec = central_diff_vec(U_np1, h)
+function new_FPK_step!(N_h, M_n, M_np1, U_np1, PDL_matrix, h, ν, Δt)
+    U_diff_vec = central_diff_vec(Array(U_np1), h)
     T = zeros(N_h, N_h) + Tridiagonal(-1 * U_diff_vec[1:(N_h-1)], zeros(N_h), U_diff_vec[2:N_h])
     T[1, end] = -U_diff_vec[end]
     T[end, 1] = U_diff_vec[1]
 
-    tot_mat = (1.0 * I(N_h) + Δt * (ν * PDL_matrix - (1 / (2h)) * T))
+    tot_mat = CuArray((1.0 * I(N_h) + Δt * (ν * PDL_matrix - (1 / (2h)) * T)))
 
-    if use_gpu
-        M_n = CuArray(tot_mat) \ CuArray(M_np1)
-        M_n = Array(M_n)
-    else
-        M_n = tot_mat \ M_np1
-    end
+    #δ_k_gpu .= gmres(J_F_gpu, mathcalF_gpu; rtol=1e-10, itmax=500)[1]
+
+    @. M_n_gpu = gmres(tot_mat, M_np1; rtol=1e-10, itmax=500)[1]
     #@infiltrate
-    return M_n
+    return
 end
 
 function new_FPK_solve(U_mat, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α)
     M_mat = Array{Float64}(undef, N_h, N_T)
     M_mat[:, end] = M_T
 
+    U_mat_gpu = CuArray(U_mat)
+    M_mat_gpu = CuArray(M_mat)
+
     #FPK_progress = Progress(num_it_MFG, desc="FPK iterations")
     fpk_avg_time = 0.0
     fpk_solve_time = time()
     for j in 1:(N_T-1)
         fpk_time = time()
-        M_mat[:, N_T-j] = new_FPK_step(N_h, M_mat[:, N_T-j+1], U_mat[:, N_T-j+1], PDL_matrix, h, ν, Δt)
+        #M_mat[:, N_T-j] = new_FPK_step(N_h, M_mat[:, N_T-j+1], U_mat[:, N_T-j+1], PDL_matrix, h, ν, Δt)
+        new_FPK_step!(N_h, view(M_mat_gpu, :, N_t - j), view(M_mat_gpu, :, N_T - j + 1), view(U_mat_gpu, :, N_T - j + 1), PDL_matrix, h, ν, Δt)
         fpk_avg_time += time() - fpk_time
         #next!(FPK_progress)
     end
     fpk_avg_time = fpk_avg_time / (N_T - 1)
     fpk_solve_time = time() - fpk_solve_time
     println("FPK solve time: ", fpk_solve_time, ". FPK step avg. time: ", fpk_avg_time)
+
+    M_mat = Array(M_mat_gpu)
     return M_mat
 end
 
 ###############################
 
 # MFG algorithm
+function max_error(vec, wrt_vec, debug=false)
+    #Assuming boundary 
+    max_difference = maximum(abs.(vec - wrt_vec))
+    max_index_diff = argmax(abs.(vec - wrt_vec))
+    max_index_wrt_vec = argmax(abs.(wrt_vec))
+    if debug
+        println("max_index_diff: ", max_index_diff, ". Total length: ", length(vec), ". x-pos: ", string((max_index_diff / length(vec))))
+        println("max_index_wrt_vec: ", max_index_wrt_vec, ". Total length: ", length(vec), ". x-pos: ", string((max_index_wrt_vec / length(vec))))
+    end
+    return max_difference
+end
 
+function l1_error(vec, wrt_vec, debug=false)
+    if debug
+        println("length(vec): ", length(vec))
+        println("length(wrt_vec): ", length(wrt_vec))
+    end
+    l1 = sum(abs.(vec - wrt_vec)) #*h
+    return l1
+end
 
 
 function MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid, write_iteration_results=false)
@@ -410,13 +462,13 @@ using JSON
 
 println("RUN SIMULATION")
 ####Choose grid sizes and parameters:
-h_reference = 1 / 2^10
+h_reference = 1 / 2^11
 h_list = [h_reference] #[1 / 2^7, 1 / 2^8, 1 / 2^9, h_reference]
 
 α = 1.5
 x_l = -1
 x_r = 2
-Δt = 0.001
+Δt = 0.0001
 t_0 = 0
 T = 0.5
 ν = 0.09^2
@@ -471,6 +523,8 @@ U_list = Array{Float64}[]
 
 println("Use GPU to solve linear systems: ", use_gpu)
 
+
+write_iters = true
 for h in h_list
     println("")
     println("start for loop, h=", h)
@@ -481,8 +535,14 @@ for h in h_list
     N_h = length(x_grid)
     N_T = length(t_vec)
     M_T = m_T_func.(x_grid)
+    if write_iters
+        push!(params["h_list"], h)
+        open(params_file, "w") do io
+            JSON.print(io, params)
+        end
+    end
+    (U_mat, M_mat) = MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid, write_iters)
 
-    (U_mat, M_mat) = MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid, true)
 
     M_mat = reverse(M_mat, dims=2)
     U_mat = reverse(U_mat, dims=2)
@@ -499,8 +559,10 @@ for h in h_list
     writedlm(joinpath(runs_folder, "run$(run_number)_M_mat_conv_h$(h)_deltat$(Δt).csv"), M_mat, ",")
 
     # Add completed h to params and save again
-    push!(params["h_list"], h)
-    open(params_file, "w") do io
-        JSON.print(io, params)
+    if !write_iters
+        push!(params["h_list"], h)
+        open(params_file, "w") do io
+            JSON.print(io, params)
+        end
     end
 end

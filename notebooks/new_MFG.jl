@@ -272,7 +272,7 @@ function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_
     for n in 1:(N_T-1)
         #println("n=",n)
         if method == "explicit"
-            U_mat[:, n+1] = @time explicit_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid)
+            U_mat[:, n+1] = explicit_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid)
         elseif method == "theta"
             U_mat[:, n+1] = imp_exp_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid)
         else
@@ -452,12 +452,12 @@ using JSON
 println("RUN SIMULATION")
 ####Choose grid sizes and parameters:
 h_reference = 1 / 2^11
-h_list = [h_reference]
+h_list = [1 / 2^6]
 
 α = 1.5
 x_l = -1
 x_r = 2
-Δt = 0.0001
+Δt = 0.001
 t_0 = 0
 T = 0.5
 ν = 0.09^2
