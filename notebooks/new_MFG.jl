@@ -144,7 +144,7 @@ end
 # HJB algorithm
 use_gpu = true
 
-function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_grid, δ, tol=1e-10)
+function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_grid, δ, tol=1e-13)
     x_k = U_n
 
     #println("Starting Netwon's method...")
@@ -355,11 +355,73 @@ function MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_g
     M_mat_temp = zeros(Float64, N_h, N_T)
 
     println("Starting MFG_solve for loop...")
+    ## Didn't work:
+    #read_initial_guess = true
+    #continue_old_run = true
     for j in 1:num_it_MFG #ProgressBar(1:num_it_MFG)
         mfg_solve_time = time()
         println("j: ", j)
         #println("MFG iterations. j=", j, "/", num_it_MFG)
+        #=  if read_initial_guess && j == 1
+             #sleep(10)
+             run = "notebooks/new_MFG_convergence_rate_runs/run" * string(run_number)
+             println("run: ", run)
+             println(pwd())
+             params = JSON.parsefile(run * "_params.json")
+             ind = findfirst(item -> item == h, params["h_list"])
+             if ind == 1
+                 println("in if ind==1")
+                 if continue_old_run
+                     println("in if continue_old_run")
+                     old_run_num = 22
+                     old_run = "notebooks/new_MFG_convergence_rate_runs/run" * string(old_run_num)
+                     println("old_run: ", old_run)
+                     println(pwd())
+                     old_params = JSON.parsefile(old_run * "_params.json")
+                     old_h = old_params["h_list"][end]
+                     println("old_h: ", old_h)
+                     U_old = reverse(readdlm(old_run * "_U_mat_conv_h$(old_h)_deltat$(Δt).csv", ','), dims=2)
+                     N_old, N_T2 = size(U_old)
+                     #h_ratio = old_h/h # assume h_ratio is power of 2. 
+                     @assert N_T == N_T2
+                     @assert N_h == 2 * N_old
+                     for m in 1:N_T
+                         for i in 1:N_old
+                             U_mat_temp[2i-1, m] = U_old[i, m]
+                         end
+                         for i in 1:N_old-1
+                             U_mat_temp[2i, m] = (U_old[i, m] + U_old[i+1, m]) / 2
+                         end
+                         U_mat_temp[end, m] = (U_old[end, m] + U_old[1, m]) / 2
+                     end
+
+                 else
+                     U_mat_temp = new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_it_HJB, x_grid, δ)
+                 end
+                 println("end if ind==1")
+             else
+                 println("in else read initial guess")
+                 old_h_ind = ind - 1
+                 old_h = params["h_list"][old_h_ind]
+                 U_old = readdlm(run * "_U_mat_conv_h$(old_h)_deltat$(Δt).csv", ',')
+                 N_old, N_T2 = size(U_old)
+                 #h_ratio = old_h/h # assume h_ratio is power of 2. 
+                 @assert N_T == N_T2
+                 @assert N_h == 2 * N_old
+                 for m in 1:N_T
+                     for i in 1:N_old
+                         U_mat_temp[2i-1, m] = U_old[i, m]
+                     end
+                     for i in 1:N_old-1
+                         U_mat_temp[2i, m] = (U_old[i, m] + U_old[i+1, m]) / 2
+                     end
+                     U_mat_temp[end, m] = (U_old[end, m] + U_old[1, m]) / 2
+                 end
+                 println("end else read initial guess")
+             end
+         else =#
         U_mat_temp = new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_it_HJB, x_grid, δ)
+        #end
         #@infiltrate
         M_mat_temp = new_FPK_solve(U_mat_temp, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α) #Use U_mat or U_mat_temp?
 
@@ -452,12 +514,12 @@ using JSON
 println("RUN SIMULATION")
 ####Choose grid sizes and parameters:
 h_reference = 1 / 2^11
-h_list = [1 / 2^6]
+h_list = [1 / 2^5]
 
 α = 1.5
 x_l = -1
 x_r = 2
-Δt = 0.001
+Δt = 0.00005
 t_0 = 0
 T = 0.5
 ν = 0.09^2
@@ -513,7 +575,8 @@ U_list = Array{Float64}[]
 
 println("Use GPU to solve linear systems: ", use_gpu)
 
-write_iters = false
+write_iters = true
+
 for h in h_list
     println("")
     println("start for loop, h=", h)
@@ -524,12 +587,13 @@ for h in h_list
     N_h = length(x_grid)
     N_T = length(t_vec)
     M_T = m_T_func.(x_grid)
-    if write_iters
-        push!(params["h_list"], h)
-        open(params_file, "w") do io
-            JSON.print(io, params)
-        end
+
+    #if write_iters
+    push!(params["h_list"], h)
+    open(params_file, "w") do io
+        JSON.print(io, params)
     end
+    #end
     (U_mat, M_mat) = MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid, write_iters)
 
 
@@ -548,10 +612,10 @@ for h in h_list
     writedlm(joinpath(runs_folder, "run$(run_number)_M_mat_conv_h$(h)_deltat$(Δt).csv"), M_mat, ",")
 
     # Add completed h to params and save again
-    if !write_iters
-        push!(params["h_list"], h)
-        open(params_file, "w") do io
-            JSON.print(io, params)
-        end
-    end
+    #=     if !write_iters
+            push!(params["h_list"], h)
+            open(params_file, "w") do io
+                JSON.print(io, params)
+            end
+        end =#
 end

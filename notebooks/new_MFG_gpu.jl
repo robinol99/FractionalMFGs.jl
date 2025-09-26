@@ -320,7 +320,7 @@ function new_FPK_step!(N_h, M_n, M_np1, U_np1, PDL_matrix, h, ν, Δt)
 
     #δ_k_gpu .= gmres(J_F_gpu, mathcalF_gpu; rtol=1e-10, itmax=500)[1]
 
-    @. M_n_gpu = gmres(tot_mat, M_np1; rtol=1e-10, itmax=500)[1]
+    @. M_n = gmres(tot_mat, M_np1; rtol=1e-10, itmax=500)[1]
     #@infiltrate
     return
 end
@@ -338,7 +338,7 @@ function new_FPK_solve(U_mat, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α)
     for j in 1:(N_T-1)
         fpk_time = time()
         #M_mat[:, N_T-j] = new_FPK_step(N_h, M_mat[:, N_T-j+1], U_mat[:, N_T-j+1], PDL_matrix, h, ν, Δt)
-        new_FPK_step!(N_h, view(M_mat_gpu, :, N_t - j), view(M_mat_gpu, :, N_T - j + 1), view(U_mat_gpu, :, N_T - j + 1), PDL_matrix, h, ν, Δt)
+        new_FPK_step!(N_h, view(M_mat_gpu, :, N_T - j), view(M_mat_gpu, :, N_T - j + 1), view(U_mat_gpu, :, N_T - j + 1), PDL_matrix, h, ν, Δt)
         fpk_avg_time += time() - fpk_time
         #next!(FPK_progress)
     end

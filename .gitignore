@@ -3,3 +3,5 @@
 *.jl.mem
 notebooks/new_MFG_convergence_rate_runs/
 notebooks/new_MFG_iteration_plots/
+notebooks/new_crowdcrush_runs/
+notebooks/new_crowdcrush_iteration_plots
