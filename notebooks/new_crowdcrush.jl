@@ -30,7 +30,7 @@ end
 
 
 function m_T_func(x)
-    m_T_func_unnorm = (x) -> exp(-(x - 0.5)^2 / 0.1^2)
+    m_T_func_unnorm = (x) -> exp(-50(x - 0.2)^2)
     oneOverC, error = quadgk(m_T_func_unnorm, 0, 1) #Why 0, 1? Double check
     return (1 / oneOverC) * m_T_func_unnorm(x)
 end
@@ -86,6 +86,7 @@ function old_conv_func(m_vec, x_vec, δ)
     end
     return conv_vec
 end
+
 
 
 
