@@ -14,11 +14,7 @@ using QuadGK;
 using SpecialFunctions: gamma, loggamma, zeta
 using CUDA
 println("BLAS.get_num_threads(): ", BLAS.get_num_threads())
-#= BLAS.get_num_threads()
-println("BLAS.get_num_threads(): ", BLAS.get_num_threads())
-println("Sys.CPU_THREADS: ", Sys.CPU_THREADS)
-BLAS.set_num_threads(Sys.CPU_THREADS)
-println("BLAS.get_num_threads(): ", BLAS.get_num_threads()) =#
+
 
 # Functions
 
@@ -30,44 +26,18 @@ end
 
 
 function m_T_func(x)
-    m_T_func_unnorm = (x) -> exp(-50(x - 0.2)^2)
+    m_T_func_unnorm = (x) -> exp(-(x - 0.5)^2 / (0.1)^2)
     oneOverC, error = quadgk(m_T_func_unnorm, 0, 1) #Why 0, 1? Double check
     return (1 / oneOverC) * m_T_func_unnorm(x)
 end
 
-function Gh_func(M)
-    return zeros(length(M))
-end
-
-#= function conv_fft(M, x_grid, h, δ) # Double check
-    N_h = length(M)
-    L = x_grid[end] - x_grid[1]   # domain length
-    # Force L=1 since "physical" domain is (0,1), extension to (-1,2) is to avoid boundary artifacts? Tried but gives large
-    # grid differences, wrapped into (-L/2, L/2]
-    raw_diffs = collect(0:N_h-1) .* h
-    diffs = raw_diffs .- round.(raw_diffs ./ L) .* L
-
-    # Gaussian kernel on differences
-    ϕ_prenormalization = exp.(-(diffs .^ 2) ./ (2δ^2))
-    ϕ = ϕ_prenormalization ./ (h * sum(ϕ_prenormalization))   # normalization
-
-    # FFT-based circular convolution
-    conv = real(ifft(fft(ϕ) .* fft(M)))
-    return conv
-end =#
-
 function old_conv_func(m_vec, x_vec, δ)
-    ### Double check if this is actually correct, not completely sure...
-    ### The "physical domain" is [0,1), but we extend to (-1,2) to avoid boundary artifacts...
-    ### What is then the correct way to handle the convolution?
+
     old_ϕ_δ = (x, δ) -> 1 / (δ * sqrt(2 * π)) * exp(-x^2 / (2 * δ^2))
     N_h = length(m_vec)
     h = x_vec[2] - x_vec[1]
     conv_vec = Vector{Float64}(undef, N_h)
 
-    # Base offsets from reference node and minimum-image wrap
-    # Δs = x_vec .- x_vec[1]
-    # Δs .-= round.(Δs)  # map to (-0.5, 0.5]
     Δs = (x_vec .- x_vec[1]) .- round.(x_vec .- x_vec[1])  # (-0.5, 0.5] 
 
     # Periodic kernel weights and discrete normalization
@@ -87,26 +57,46 @@ function old_conv_func(m_vec, x_vec, δ)
     return conv_vec
 end
 
-
-
-
-function Fh_func(M_n, t_n, δ, x_grid, h)
-    #ϕ_δ=1/(δ* sqrt(2*π)) * exp.(- (x_grid .^ 2) / (2*δ^2))
-    f_term_func = (x, t) -> 5 * (x - 0.5 * (1 - sin(2 * π * t)))^2
-    conv_term = old_conv_func(M_n, x_grid, δ)
-    #conv_term = conv_fft(M_n, x_grid, h, δ)
-    f_term = f_term_func.(x_grid, t_n)
-    return f_term + conv_term #Double check
+function Q(x_vec, δ)
+    a = 20
+    b = 15
+    c = 0.97
+    σ = 0.03
+    Q_1 = ((x) -> 1 / σ * exp(-(x - c)^2 / (4 * σ^2)) + 1 / σ * exp(-(x - c + 1)^2 / (4 * σ^2))).(x_vec)
+    base_vec = -a * x_vec .+ b
+    Q_2 = old_conv_func(base_vec, x_vec, δ)
+    return Q_1 + Q_2
 end
 
-function H_func(p)
-    return p^2 / 2
+function B(M, t_n) # congestion term
+    B_ = 0
+    cutt = 50
+    M < cutt ? B_ = 0.1 * exp(0.5 * M) : B_ = 0.1 * exp.(0.5 * cutt)
+    return B_
 end
 
-function create_mathcalF(x, U_n, PDL_matrix, M_n, Δt, n, h, ν, x_grid, δ, δ_hU)
+function Fh_func(M_n, t_n, δ, x_grid)
+    C_Q = 0.1
+    C_B = 1
+    Q_term = C_Q * Q(x_grid, δ)
+    B_term = C_B * B.(M_n, 2 - t_n)
+
+    return Q_term + B_term
+end
+
+function Gh_func(M, x_grid, t_n, δ)
+    C_G = 1 / 2
+    return C_G * Fh_func(M, t_n, δ, x_grid)
+end
+
+function H_func(p, C_H)
+    return C_H * p^2
+end
+
+function create_mathcalF(x, U_n, PDL_matrix, M_n, Δt, n, h, ν, x_grid, δ, δ_hU, C_H)
     # F_hM_n = Fh_func(M_n, (n - 1) * Δt, δ, x_grid, h) #time was T-nΔt in old code??
     #δ_hx = central_diff_vec(x, h)
-    Hδ_hx = H_func.(δ_hU)
+    Hδ_hx = H_func.(δ_hU, C_H)
     return x - U_n + Δt * (ν * PDL_matrix * x + Hδ_hx) # - F_hM_n)
 end
 
@@ -145,17 +135,9 @@ end
 # HJB algorithm
 use_gpu = true
 
-function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_grid, δ, tol=1e-13)
+function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_grid, δ, C_H, tol=1e-13)
     x_k = U_n
 
-    #println("Starting Netwon's method...")
-    #if n > 69
-    # println("Inside")
-    # @infiltrate
-    #end
-
-    #Newtons_progress = Progress(num_it_MFG, desc="Newtons iterations")
-    #println("Recording time spent in Newton's for n=", n, "...")
     newton_time = time()
     jacobian_tot_time = 0.0
     mathcalF_tot_time = 0.0
@@ -166,12 +148,12 @@ function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_
         mathcalF_gpu = CuArray{Float64}(undef, N_h)
     end
 
-    F_hM_n = Fh_func(M_n, (n - 1) * Δt, δ, x_grid, h) #time was T-nΔt in old code??
+    F_hM_n = Fh_func(M_n, (n - 1) * Δt, δ, x_grid) #time was T-nΔt in old code??
 
     final_k = 0
     for k in 1:num_iter_HJB
         final_k += 1
-        #println("k=",k) 
+        #println("k=", k)
         δ_hU = central_diff_vec(x_k, h)
 
         J_time = time()
@@ -179,7 +161,7 @@ function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_
         jacobian_tot_time += time() - J_time
 
         mathcalF_time = time()
-        mathcalFx_k = create_mathcalF(x_k, U_n, PDL_matrix, M_n, Δt, n, h, ν, x_grid, δ, δ_hU) - Δt * F_hM_n
+        mathcalFx_k = create_mathcalF(x_k, U_n, PDL_matrix, M_n, Δt, n, h, ν, x_grid, δ, δ_hU, C_H) - Δt * F_hM_n
         mathcalF_tot_time += time() - mathcalF_time
 
         inverse_time = time()
@@ -213,12 +195,6 @@ function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_
 
     newton_time = time() - newton_time
 
-    #println("newtons method. n: ", n)
-    #println("newton time: ", newton_time)
-    #println("jacobian tot time: ", jacobian_tot_time)
-    #println("mathcalF tot time: ", mathcalF_tot_time)
-    #println("inverse to time: ", inverse_tot_time)
-
     time_percentages = [newton_time, jacobian_tot_time / newton_time, mathcalF_tot_time / newton_time, inverse_tot_time / newton_time]
 
     U_np1 = x_k
@@ -226,42 +202,10 @@ function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_
 end
 
 
-# TRY EXPLICIT:
-
-function explicit_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_grid)
-    F_hM_n = Fh_func(M_n, (n - 1) * Δt, δ, x_grid, h) #time was T-nΔt in old code??
-    δ_hU_n = central_diff_vec(U_n, h)
-    Hδ_hU_n = H_func.(δ_hU_n)
-    PDL_prod = PDL_matrix * U_n
-    U_np1 = U_n - Δt * (ν * PDL_prod + Hδ_hU_n - F_hM_n)
-    return U_np1
-end
-
-# Above didn't work. TRY IMPLICIT-EXPLICIT:
-
-function imp_exp_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_grid, θ=0.9)
-    #implicit half step
-    implicit_mat = (I + Δt / 2 * θ * ν * PDL_matrix)
-    U_np1over2 = implicit_mat \ U_n
-
-    #explicit half step
-    F_hM_n = Fh_func(M_n, (n - 1) * Δt, δ, x_grid, h) #time was T-nΔt in old code??
-    δ_hU_np1over2 = central_diff_vec(U_np1over2, h)
-    Hδ_hU_np1over2 = H_func.(δ_hU_np1over2)
-    PDL_prod = PDL_matrix * U_np1over2
-
-    explicit_term = (1 - θ) * ν * PDL_prod + Hδ_hU_np1over2 - F_hM_n
-    U_np1 = U_np1over2 - Δt / 2 * explicit_term
-
-    return U_np1
-end
-
-# Doesn't seem to work either
-
 #######
-function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_grid, δ)
+function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_grid, δ, C_H)
     U_mat = Array{Float64}(undef, N_h, N_T)
-    U_mat[:, 1] = Gh_func(M_mat[:, 1])
+    U_mat[:, 1] = Gh_func(M_mat[:, 1], x_grid, 0, δ)
 
     #println("Starting HJB_solve ...")
     #HJB_progress = Progress(num_it_MFG, desc="HJB iterations")
@@ -277,7 +221,7 @@ function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_
         elseif method == "theta"
             U_mat[:, n+1] = imp_exp_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid)
         else
-            U_mat[:, n+1], time_percentages, final_k = new_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid, δ)
+            U_mat[:, n+1], time_percentages, final_k = new_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid, δ, C_H)
             #println("n: ", n, "Time and time percentages [N (Newtons), J/N, F/N, inverse/N]: ", time_percentages)
             push!(newton_iterations, final_k)
             avg_times[1] += time_percentages[1]
@@ -303,13 +247,13 @@ end
 
 # FPK algorithm
 
-function new_FPK_step(N_h, M_np1, U_np1, PDL_matrix, h, ν, Δt)
+function new_FPK_step(N_h, M_np1, U_np1, PDL_matrix, h, ν, Δt, C_H)
     U_diff_vec = central_diff_vec(U_np1, h)
     T = zeros(N_h, N_h) + Tridiagonal(-1 * U_diff_vec[1:(N_h-1)], zeros(N_h), U_diff_vec[2:N_h])
     T[1, end] = -U_diff_vec[end]
     T[end, 1] = U_diff_vec[1]
 
-    tot_mat = (1.0 * I(N_h) + Δt * (ν * PDL_matrix - (1 / (2h)) * T))
+    tot_mat = (1.0 * I(N_h) + Δt * (ν * PDL_matrix - (2 * C_H) * (1 / (2h)) * T))
 
     if use_gpu
         M_n = CuArray(tot_mat) \ CuArray(M_np1)
@@ -321,7 +265,7 @@ function new_FPK_step(N_h, M_np1, U_np1, PDL_matrix, h, ν, Δt)
     return M_n
 end
 
-function new_FPK_solve(U_mat, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α)
+function new_FPK_solve(U_mat, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α, C_H)
     M_mat = Array{Float64}(undef, N_h, N_T)
     M_mat[:, end] = M_T
 
@@ -330,7 +274,7 @@ function new_FPK_solve(U_mat, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α)
     fpk_solve_time = time()
     for j in 1:(N_T-1)
         fpk_time = time()
-        M_mat[:, N_T-j] = new_FPK_step(N_h, M_mat[:, N_T-j+1], U_mat[:, N_T-j+1], PDL_matrix, h, ν, Δt)
+        M_mat[:, N_T-j] = new_FPK_step(N_h, M_mat[:, N_T-j+1], U_mat[:, N_T-j+1], PDL_matrix, h, ν, Δt, C_H)
         fpk_avg_time += time() - fpk_time
         #next!(FPK_progress)
     end
@@ -346,7 +290,7 @@ end
 
 
 
-function MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid, write_iteration_results=false)
+function MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid, C_H, write_iteration_results=false)
     M_mat = repeat(Float64.(M_T), 1, N_T)
     #U_mat = Array{Float64}(undef, N_h, N_T)
     U_mat = zeros(Float64, N_h, N_T)
@@ -361,9 +305,9 @@ function MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_g
         mfg_solve_time = time()
         println("j: ", j)
 
-        U_mat_temp = new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_it_HJB, x_grid, δ)
+        U_mat_temp = new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_it_HJB, x_grid, δ, C_H)
 
-        M_mat_temp = new_FPK_solve(U_mat_temp, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α) #Use U_mat or U_mat_temp?
+        M_mat_temp = new_FPK_solve(U_mat_temp, M_T, PDL_matrix, N_h, Δt, N_T, h, ν, α, C_H) #Use U_mat or U_mat_temp?
 
 
         U_error_start = max_error(U_mat[0 .<= x_grid .< 1, 1], U_mat_temp[0 .<= x_grid .< 1, 1])
@@ -454,19 +398,22 @@ using JSON
 println("RUN SIMULATION")
 ####Choose grid sizes and parameters:
 h_reference = 1 / 2^11
-h_list = [1 / 2^6]
+h_list = [1 / 2^9]
 
 α = 1.5
-x_l = -1
-x_r = 2
-Δt = 0.001
+x_l = 0
+x_r = 1
+Δt = 0.01
 t_0 = 0
-T = 0.5
-ν = 0.09^2
+T = 2
+ν = 0.1
 num_it_MFG = 50
-num_it_HJB = 20
-δ = 0.4
+num_it_HJB = 50
+δ = 0.05
 R = 30
+
+C_L = 10
+C_H = 1 / C_L
 
 ###################################+
 
@@ -504,6 +451,7 @@ params = Dict(
     "num_it_HJB" => num_it_HJB,
     "δ" => δ,
     "R" => R,
+    "C_H" => C_H,
 )
 
 params_file = joinpath(runs_folder, "run$(run_number)_params.json")
@@ -534,7 +482,7 @@ for h in h_list
         JSON.print(io, params)
     end
     #end
-    (U_mat, M_mat) = MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid, write_iters)
+    (U_mat, M_mat) = MFG_solve(N_h, N_T, h, Δt, num_it_MFG, num_it_HJB, M_T, α, δ, R, x_grid, C_H, write_iters)
 
 
     M_mat = reverse(M_mat, dims=2)
