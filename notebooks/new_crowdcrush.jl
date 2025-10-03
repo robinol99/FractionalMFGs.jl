@@ -31,53 +31,47 @@ function m_T_func(x)
     return (1 / oneOverC) * m_T_func_unnorm(x)
 end
 
-function old_conv_func(m_vec, x_vec, δ)
-
-    old_ϕ_δ = (x, δ) -> 1 / (δ * sqrt(2 * π)) * exp(-x^2 / (2 * δ^2))
-    N_h = length(m_vec)
-    h = x_vec[2] - x_vec[1]
-    conv_vec = Vector{Float64}(undef, N_h)
-
-    Δs = (x_vec .- x_vec[1]) .- round.(x_vec .- x_vec[1])  # (-0.5, 0.5] 
-
-    # Periodic kernel weights and discrete normalization
-    weights = old_ϕ_δ.(Δs, δ)
-    Z = h * sum(weights)
-    weights ./= Z
-
-    # Circular convolution with circulant weights (O(N^2), robust and simple)
-    for j in 1:N_h
-        s = 0.0
-        for i in 1:N_h
-            idx = mod(j - i, N_h) + 1  # 1-based index
-            s += weights[idx] * m_vec[i]
-        end
-        conv_vec[j] = h * s
-    end
-    return conv_vec
+#= function decreasing_bump_func(x)
+    g = (x) -> x < 0 ? 0 : exp(-1 / x)
+    h = (x) -> g(x) / (g(x) + g(1 - x))
+    j = (x) -> h(0.9 + 20 * x) - h(0.1 + 0.9x)
+    return j(x)
 end
 
 function Q(x_vec, δ)
-    a = 20
-    b = 15
-    c = 0.97
     σ = 0.03
+    c = 0.97
     Q_1 = ((x) -> 1 / σ * exp(-(x - c)^2 / (4 * σ^2)) + 1 / σ * exp(-(x - c + 1)^2 / (4 * σ^2))).(x_vec)
-    base_vec = -a * x_vec .+ b
-    Q_2 = old_conv_func(base_vec, x_vec, δ)
+
+    Q_2 = 10 * decreasing_bump_func.(x_vec)
+
     return Q_1 + Q_2
+end =#
+
+function decreasing_bump_func(x)
+    g = (x) -> x < 0 ? 0 : exp(-1 / x)
+    h = (x) -> g(x) / (g(x) + g(1 - x))
+    #j = (x) -> 3 * (h(0.6 - 0.7 * x) + h(-2 + 3 * x))
+    j = (x) -> 3 * (h(0.65 - 0.6 * x) + h(-2.3 + 3 * x))
+    return j(x)
+end
+
+function Q(x_vec, δ)
+    Q_2 = decreasing_bump_func.(x_vec)
+    return Q_2
 end
 
 function B(M, t_n) # congestion term
     B_ = 0
     cutt = 50
-    M < cutt ? B_ = 0.1 * exp(0.5 * M) : B_ = 0.1 * exp.(0.5 * cutt)
+    M < cutt ? B_ = 1 * exp(0.5 * M) : B_ = 1 * exp.(0.5 * cutt)
+    #M < cutt ? B_ = (1 / 4) * M^2 : B_ = (1 / 4) * cutt^2
     return B_
 end
 
 function Fh_func(M_n, t_n, δ, x_grid)
-    C_Q = 0.1
-    C_B = 1
+    C_Q = 1
+    C_B = 0.05
     Q_term = C_Q * Q(x_grid, δ)
     B_term = C_B * B.(M_n, 2 - t_n)
 
@@ -151,6 +145,7 @@ function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_
     F_hM_n = Fh_func(M_n, (n - 1) * Δt, δ, x_grid) #time was T-nΔt in old code??
 
     final_k = 0
+    final_norm = 0
     for k in 1:num_iter_HJB
         final_k += 1
         #println("k=", k)
@@ -183,6 +178,7 @@ function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_
         x_k = x_kp1
 
         δ_k_norm = norm(δ_k)
+        final_norm = δ_k_norm
         if δ_k_norm < tol
             break
         end
@@ -198,7 +194,7 @@ function new_HJB_step(num_iter_HJB, N_h, U_n, M_n, PDL_matrix, Δt, h, ν, n, x_
     time_percentages = [newton_time, jacobian_tot_time / newton_time, mathcalF_tot_time / newton_time, inverse_tot_time / newton_time]
 
     U_np1 = x_k
-    return U_np1, time_percentages, final_k
+    return U_np1, time_percentages, final_k, final_norm
 end
 
 
@@ -213,23 +209,21 @@ function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_
     method = ""
     avg_times = [0.0, 0.0, 0.0, 0.0]
     newton_iterations = Float64[]
+    newton_final_norms = Float64[]
     hjb_solve_time = time()
     for n in 1:(N_T-1)
         #println("n=",n)
-        if method == "explicit"
-            U_mat[:, n+1] = explicit_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid)
-        elseif method == "theta"
-            U_mat[:, n+1] = imp_exp_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid)
-        else
-            U_mat[:, n+1], time_percentages, final_k = new_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid, δ, C_H)
-            #println("n: ", n, "Time and time percentages [N (Newtons), J/N, F/N, inverse/N]: ", time_percentages)
-            push!(newton_iterations, final_k)
-            avg_times[1] += time_percentages[1]
-            avg_times[2] += time_percentages[2]
-            avg_times[3] += time_percentages[3]
-            avg_times[4] += time_percentages[4]
-            #println("avg_time: ", avg_times)
-        end
+
+        U_mat[:, n+1], time_percentages, final_k, final_norm = new_HJB_step(num_iter_HJB, N_h, U_mat[:, n], M_mat[:, n], PDL_matrix, Δt, h, ν, n, x_grid, δ, C_H)
+        #println("n: ", n, "Time and time percentages [N (Newtons), J/N, F/N, inverse/N]: ", time_percentages)
+        push!(newton_iterations, final_k)
+        push!(newton_final_norms, final_norm)
+        avg_times[1] += time_percentages[1]
+        avg_times[2] += time_percentages[2]
+        avg_times[3] += time_percentages[3]
+        avg_times[4] += time_percentages[4]
+        #println("avg_time: ", avg_times)
+
         #next!(HJB_progress)
     end
 
@@ -239,6 +233,7 @@ function new_HJB_solve(N_h, N_T, M_mat, PDL_matrix, Δt, h, ν, num_iter_HJB, x_
     avg_times[4] = avg_times[4] / (N_T - 1)
     println("HJB solve time: ", time() - hjb_solve_time, ". HJB step avg time and time percentages [N (Newtons), J/N, F/N, inverse/N]: ", avg_times)
     println("Newton iterations, min, max, avg: ", minimum(newton_iterations), ". ", maximum(newton_iterations), ". ", sum(newton_iterations) / length(newton_iterations))
+    println("Newton final norms, min, max, avg: ", minimum(newton_final_norms), ". ", maximum(newton_final_norms), ". ", sum(newton_final_norms) / length(newton_final_norms))
     #@infiltrate
     return U_mat
 end
@@ -398,12 +393,12 @@ using JSON
 println("RUN SIMULATION")
 ####Choose grid sizes and parameters:
 h_reference = 1 / 2^11
-h_list = [1 / 2^9]
+h_list = [1 / 2^8]
 
 α = 1.5
-x_l = 0
-x_r = 1
-Δt = 0.01
+x_l = -1
+x_r = 2
+Δt = 0.005
 t_0 = 0
 T = 2
 ν = 0.1
