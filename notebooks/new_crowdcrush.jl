@@ -48,6 +48,38 @@ function Q(x_vec, δ)
     return Q_1 + Q_2
 end =#
 
+
+function old_conv_func(m_vec, x_vec, δ)
+    ### Double check if this is actually correct, not completely sure...
+    ### The "physical domain" is [0,1), but we extend to (-1,2) to avoid boundary artifacts...
+    ### What is then the correct way to handle the convolution?
+    old_ϕ_δ = (x, δ) -> 1 / (δ * sqrt(2 * π)) * exp(-x^2 / (2 * δ^2))
+    N_h = length(m_vec)
+    h = x_vec[2] - x_vec[1]
+    conv_vec = Vector{Float64}(undef, N_h)
+
+    # Base offsets from reference node and minimum-image wrap
+    # Δs = x_vec .- x_vec[1]
+    # Δs .-= round.(Δs)  # map to (-0.5, 0.5]
+    Δs = (x_vec .- x_vec[1]) .- round.(x_vec .- x_vec[1])  # (-0.5, 0.5] 
+
+    # Periodic kernel weights and discrete normalization
+    weights = old_ϕ_δ.(Δs, δ)
+    Z = h * sum(weights)
+    weights ./= Z
+
+    # Circular convolution with circulant weights (O(N^2), robust and simple)
+    for j in 1:N_h
+        s = 0.0
+        for i in 1:N_h
+            idx = mod(j - i, N_h) + 1  # 1-based index
+            s += weights[idx] * m_vec[i]
+        end
+        conv_vec[j] = h * s
+    end
+    return conv_vec
+end
+
 function decreasing_bump_func(x)
     g = (x) -> x < 0 ? 0 : exp(-1 / x)
     h = (x) -> g(x) / (g(x) + g(1 - x))
@@ -60,20 +92,43 @@ function Q(x_vec, δ)
     Q_2 = decreasing_bump_func.(x_vec)
     return Q_2
 end
-
+#= 
 function B(M, t_n) # congestion term
     B_ = 0
     cutt = 50
+
     M < cutt ? B_ = 1 * exp(0.5 * M) : B_ = 1 * exp.(0.5 * cutt)
+    #M < cutt ? B_ = 1 * exp(0.5 * M) : B_ = 1 * exp.(0.5 * cutt)
     #M < cutt ? B_ = (1 / 4) * M^2 : B_ = (1 / 4) * cutt^2
+
+
     return B_
+end =#
+
+function B(M, x_grid, t_n) # congestion term
+    #B_ = 0
+    B_ = zeros(length(M))
+    cutt = 50
+
+    conv_term = old_conv_func(M, x_grid, 0.05)
+    for (i, elem) in enumerate(conv_term)
+        if elem < cutt
+            B_[i] = 1 * exp(0.5 .* elem)
+        else
+            B_[i] = 1 * exp(0.5 * cutt)
+        end
+    end
+
+    #M < cutt ? B_ = 1 * exp(0.5 * M) : B_ = 1 * exp.(0.5 * cutt)
+    #M < cutt ? B_ = (1 / 4) * M^2 : B_ = (1 / 4) * cutt^2
+    return B_, conv_term
 end
 
 function Fh_func(M_n, t_n, δ, x_grid)
     C_Q = 1
-    C_B = 0.05
+    C_B = 1
     Q_term = C_Q * Q(x_grid, δ)
-    B_term = C_B * B.(M_n, 2 - t_n)
+    B_term, _ = C_B .* B(M_n, x_grid, 2 - t_n) #B.(M_n, 2 - t_n)
 
     return Q_term + B_term
 end
