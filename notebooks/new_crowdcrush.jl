@@ -31,86 +31,71 @@ function m_T_func(x)
     return (1 / oneOverC) * m_T_func_unnorm(x)
 end
 
+function new_m_T_func(x_grid, c)
+    δ = 0.1 / sqrt(2)
+    h = x_grid[2] - x_grid[1]
+    x_l = x_grid[1]
+    x_r = x_grid[end] + h
+    return normalized_ext_conv_kernel(x_grid, x_l, x_r, c, δ)
+end
+
 #= function decreasing_bump_func(x)
-    g = (x) -> x < 0 ? 0 : exp(-1 / x)
-    h = (x) -> g(x) / (g(x) + g(1 - x))
-    j = (x) -> h(0.9 + 20 * x) - h(0.1 + 0.9x)
-    return j(x)
-end
-
-function Q(x_vec, δ)
-    σ = 0.03
-    c = 0.97
-    Q_1 = ((x) -> 1 / σ * exp(-(x - c)^2 / (4 * σ^2)) + 1 / σ * exp(-(x - c + 1)^2 / (4 * σ^2))).(x_vec)
-
-    Q_2 = 10 * decreasing_bump_func.(x_vec)
-
-    return Q_1 + Q_2
-end =#
-
-
-function old_conv_func(m_vec, x_vec, δ)
-    ### Double check if this is actually correct, not completely sure...
-    ### The "physical domain" is [0,1), but we extend to (-1,2) to avoid boundary artifacts...
-    ### What is then the correct way to handle the convolution?
-    old_ϕ_δ = (x, δ) -> 1 / (δ * sqrt(2 * π)) * exp(-x^2 / (2 * δ^2))
-    N_h = length(m_vec)
-    h = x_vec[2] - x_vec[1]
-    conv_vec = Vector{Float64}(undef, N_h)
-
-    # Base offsets from reference node and minimum-image wrap
-    # Δs = x_vec .- x_vec[1]
-    # Δs .-= round.(Δs)  # map to (-0.5, 0.5]
-    Δs = (x_vec .- x_vec[1]) .- round.(x_vec .- x_vec[1])  # (-0.5, 0.5] 
-
-    # Periodic kernel weights and discrete normalization
-    weights = old_ϕ_δ.(Δs, δ)
-    Z = h * sum(weights)
-    weights ./= Z
-
-    # Circular convolution with circulant weights (O(N^2), robust and simple)
-    for j in 1:N_h
-        s = 0.0
-        for i in 1:N_h
-            idx = mod(j - i, N_h) + 1  # 1-based index
-            s += weights[idx] * m_vec[i]
-        end
-        conv_vec[j] = h * s
-    end
-    return conv_vec
-end
-
-function decreasing_bump_func(x)
     g = (x) -> x < 0 ? 0 : exp(-1 / x)
     h = (x) -> g(x) / (g(x) + g(1 - x))
     #j = (x) -> 3 * (h(0.6 - 0.7 * x) + h(-2 + 3 * x))
     j = (x) -> 3 * (h(0.65 - 0.6 * x) + h(-2.3 + 3 * x))
     return j(x)
 end
+ =#
+function decreasing_bump_func(x)
+    g = (x) -> x < 0 ? 0 : exp(-1 / x)
+    h = (x) -> g(x) / (g(x) + g(1 - x))
+    j = (x) -> 3 * (h(0.9 - 0.8 * x) + h(-3 + 4 * x)) + h(1 - 4 * x) + h(4 * x - 3) - 0.25
+    return j(x)
+end
+
+function extended_conv_kernel(x, c, δ, x_l, x_r)
+    f = (y) -> exp(-(y - c)^2 / (2 * δ^2)) # 1 / (δ * sqrt(2 * π)) 
+    K = 1000
+    L = x_r - x_l
+    s = 0.0
+    for k in -K:K
+        s += f(x + k * L)
+    end
+    return s
+end
+
+function normalized_ext_conv_kernel(x_grid, x_l, x_r, c, δ)
+    vals = [extended_conv_kernel(x, c, δ, x_l, x_r) for x in x_grid]
+    dx = x_grid[2] - x_grid[1]
+    integral = sum(vals) * dx
+    return vals ./ integral
+end
+
+function fft_conv(x_grid, vec_to_convolve, x_l, x_r, δ)
+    c = x_l
+    kernel = normalized_ext_conv_kernel(x_grid, x_l, x_r, c, δ)
+    Ff = fft(kernel)
+    Gg = fft(vec_to_convolve)
+    conv_coeffs = Ff .* Gg
+    convolution_vec = real(ifft(conv_coeffs))
+    return convolution_vec .* (x_r - x_l) / length(kernel)
+end
 
 function Q(x_vec, δ)
     Q_2 = decreasing_bump_func.(x_vec)
     return Q_2
 end
-#= 
-function B(M, t_n) # congestion term
-    B_ = 0
-    cutt = 50
-
-    M < cutt ? B_ = 1 * exp(0.5 * M) : B_ = 1 * exp.(0.5 * cutt)
-    #M < cutt ? B_ = 1 * exp(0.5 * M) : B_ = 1 * exp.(0.5 * cutt)
-    #M < cutt ? B_ = (1 / 4) * M^2 : B_ = (1 / 4) * cutt^2
-
-
-    return B_
-end =#
 
 function B(M, x_grid, t_n) # congestion term
-    #B_ = 0
     B_ = zeros(length(M))
     cutt = 50
 
-    conv_term = old_conv_func(M, x_grid, 0.05)
+    δ = 0.05
+    h = x_grid[2] - x_grid[1]
+    x_l = x_grid[1]
+    x_r = x_grid[end] + h
+    conv_term = fft_conv(x_grid, M, x_l, x_r, δ)
     for (i, elem) in enumerate(conv_term)
         if elem < cutt
             B_[i] = 1 * exp(0.5 .* elem)
@@ -118,15 +103,12 @@ function B(M, x_grid, t_n) # congestion term
             B_[i] = 1 * exp(0.5 * cutt)
         end
     end
-
-    #M < cutt ? B_ = 1 * exp(0.5 * M) : B_ = 1 * exp.(0.5 * cutt)
-    #M < cutt ? B_ = (1 / 4) * M^2 : B_ = (1 / 4) * cutt^2
     return B_, conv_term
 end
 
 function Fh_func(M_n, t_n, δ, x_grid)
     C_Q = 1
-    C_B = 1
+    C_B = 0.1
     Q_term = C_Q * Q(x_grid, δ)
     B_term, _ = C_B .* B(M_n, x_grid, 2 - t_n) #B.(M_n, 2 - t_n)
 
@@ -453,7 +435,7 @@ h_list = [1 / 2^8]
 α = 1.5
 x_l = -1
 x_r = 2
-Δt = 0.005
+Δt = 0.01
 t_0 = 0
 T = 2
 ν = 0.1
@@ -524,7 +506,8 @@ for h in h_list
     t_vec = t_0:Δt:(T-Δt)
     N_h = length(x_grid)
     N_T = length(t_vec)
-    M_T = m_T_func.(x_grid)
+    #M_T = m_T_func.(x_grid)
+    M_T = new_m_T_func(x_grid, 0.4)
 
     #if write_iters
     push!(params["h_list"], h)
