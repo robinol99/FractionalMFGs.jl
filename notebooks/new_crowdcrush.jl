@@ -31,13 +31,7 @@ function m_T_func(x)
     return (1 / oneOverC) * m_T_func_unnorm(x)
 end
 
-function new_m_T_func(x_grid, c)
-    δ = 0.1 / sqrt(2)
-    h = x_grid[2] - x_grid[1]
-    x_l = x_grid[1]
-    x_r = x_grid[end] + h
-    return normalized_ext_conv_kernel(x_grid, x_l, x_r, c, δ)
-end
+
 
 #= function decreasing_bump_func(x)
     g = (x) -> x < 0 ? 0 : exp(-1 / x)
@@ -50,7 +44,7 @@ end
 function decreasing_bump_func(x)
     g = (x) -> x < 0 ? 0 : exp(-1 / x)
     h = (x) -> g(x) / (g(x) + g(1 - x))
-    j = (x) -> 3 * (h(0.9 - 0.8 * x) + h(-3 + 4 * x)) + h(1 - 4 * x) + h(4 * x - 3) - 0.25
+    j = (x) -> 3 * (h(0.9 - 0.8 * x) + 4h(-3 + 4 * x)) + h(1 - 4 * x) + h(4 * x - 3) - 0.25
     return j(x)
 end
 
@@ -82,6 +76,14 @@ function fft_conv(x_grid, vec_to_convolve, x_l, x_r, δ)
     return convolution_vec .* (x_r - x_l) / length(kernel)
 end
 
+function new_m_T_func(x_grid, c)
+    δ = 0.1 / sqrt(2)
+    h = x_grid[2] - x_grid[1]
+    x_l = x_grid[1]
+    x_r = x_grid[end] + h
+    return normalized_ext_conv_kernel(x_grid, x_l, x_r, c, δ)
+end
+
 function Q(x_vec, δ)
     Q_2 = decreasing_bump_func.(x_vec)
     return Q_2
@@ -108,7 +110,7 @@ end
 
 function Fh_func(M_n, t_n, δ, x_grid)
     C_Q = 1
-    C_B = 0.1
+    C_B = 0.0
     Q_term = C_Q * Q(x_grid, δ)
     B_term, _ = C_B .* B(M_n, x_grid, 2 - t_n) #B.(M_n, 2 - t_n)
 

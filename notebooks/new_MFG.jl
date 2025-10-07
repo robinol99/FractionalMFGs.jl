@@ -88,6 +88,56 @@ function old_conv_func(m_vec, x_vec, δ)
 end
 
 
+#= 
+function extended_conv_kernel(x, c, δ, x_l, x_r)
+    f = (y) -> exp(-(y - c)^2 / (2 * δ^2)) # 1 / (δ * sqrt(2 * π)) 
+    K = 1000
+    L = x_r - x_l
+    s = 0.0
+    for k in -K:K
+        s += f(x + k * L)
+    end
+    return s
+end
+
+function normalized_ext_conv_kernel(x_grid, x_l, x_r, c, δ)
+    vals = [extended_conv_kernel(x, c, δ, x_l, x_r) for x in x_grid]
+    dx = x_grid[2] - x_grid[1]
+    integral = sum(vals) * dx
+    return vals ./ integral
+end
+
+function fft_conv(x_grid, vec_to_convolve, x_l, x_r, δ)
+    c = x_l
+    kernel = normalized_ext_conv_kernel(x_grid, x_l, x_r, c, δ)
+    Ff = fft(kernel)
+    Gg = fft(vec_to_convolve)
+    conv_coeffs = Ff .* Gg
+    convolution_vec = real(ifft(conv_coeffs))
+    return convolution_vec .* (x_r - x_l) / length(kernel)
+end
+
+function new_m_T_func(x_grid, c)
+    δ = 0.1 / sqrt(2)
+    h = x_grid[2] - x_grid[1]
+    x_l = x_grid[1]
+    x_r = x_grid[end] + h
+    return normalized_ext_conv_kernel(x_grid, x_l, x_r, c, δ)
+end
+
+
+
+function Fh_func(M_n, t_n, δ, x_grid, h)
+    f_term_func = (x, t) -> 5 * (x - 0.5 * (1 - sin(2 * π * t)))^2
+
+    #h = x_grid[2] - x_grid[1]
+    x_l = x_grid[1]
+    x_r = x_grid[end] + h
+    conv_term = fft_conv(x_grid, M_n, x_l, x_r, δ)
+
+    f_term = f_term_func.(x_grid, t_n)
+    return f_term + conv_term #Double check
+end =#
 
 function Fh_func(M_n, t_n, δ, x_grid, h)
     #ϕ_δ=1/(δ* sqrt(2*π)) * exp.(- (x_grid .^ 2) / (2*δ^2))
@@ -514,14 +564,14 @@ using JSON
 println("RUN SIMULATION")
 ####Choose grid sizes and parameters:
 h_reference = 1 / 2^11
-h_list = [1 / 2^5]
+h_list = [1 / 2^8]
 
 α = 1.5
 x_l = -1
 x_r = 2
-Δt = 0.00005
+Δt = 0.001
 t_0 = 0
-T = 0.5
+T = 2
 ν = 0.09^2
 num_it_MFG = 50
 num_it_HJB = 20
@@ -587,6 +637,7 @@ for h in h_list
     N_h = length(x_grid)
     N_T = length(t_vec)
     M_T = m_T_func.(x_grid)
+    #M_T = new_m_T_func(x_grid, 0.5)
 
     #if write_iters
     push!(params["h_list"], h)
